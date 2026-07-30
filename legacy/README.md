@@ -1,5 +1,5 @@
-# Legacy scripts (Jan 2024)
+# Legacy
 
-Kept for reference only. Credentials were redacted.
+Reference only (Jan 2024). Credentials redacted.
 
-Use `../main.py` and the `linkedin_scraper` package instead.
+Use `../main.py` and the `linkedin_scraper` package.

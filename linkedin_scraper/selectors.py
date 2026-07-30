@@ -1,4 +1,4 @@
-"""CSS/XPath strategies — LinkedIn DOM drifts; try fallbacks in order."""
+"""XPath / CSS fallbacks. Prepend new selectors when LinkedIn changes the DOM."""
 
 from __future__ import annotations
 

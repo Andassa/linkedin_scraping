@@ -40,37 +40,39 @@ def _click_about(driver: WebDriver) -> None:
         if els:
             driver.execute_script("arguments[0].click();", els[0])
             return
-    # Maybe already on /about/
     if "/about" not in (driver.current_url or ""):
         raise NoSuchElementException("About tab not found")
 
 
 def _read_dt(section, label: str) -> str:
     if label == "Phone":
-        xp = f'.//dt[normalize-space()="Phone"]/following-sibling::dd[1]//span[@dir="ltr"]'
-        alt = f'.//dt[normalize-space()="Phone"]/following-sibling::dd[1]'
-        for candidate in (xp, alt):
-            els = section.find_elements(By.XPATH, candidate)
+        candidates = (
+            './/dt[normalize-space()="Phone"]/following-sibling::dd[1]//span[@dir="ltr"]',
+            './/dt[normalize-space()="Phone"]/following-sibling::dd[1]',
+        )
+        for xp in candidates:
+            els = section.find_elements(By.XPATH, xp)
             if els and els[0].text.strip():
                 return els[0].text.strip()
         raise NoSuchElementException(label)
 
-    # Prefer relative queries; fall back to absolute LinkedIn quirks
-    relative = f'.//dt[normalize-space()="{label}"]/following-sibling::dd[1]'
-    absolute = f'//dt[normalize-space()="{label}"]/following-sibling::dd[1]'
-    for xp in (relative, absolute):
+    for xp in (
+        f'.//dt[normalize-space()="{label}"]/following-sibling::dd[1]',
+        f'//dt[normalize-space()="{label}"]/following-sibling::dd[1]',
+    ):
         els = section.find_elements(By.XPATH, xp)
         if els and els[0].text.strip():
             return els[0].text.strip()
     raise NoSuchElementException(label)
 
 
-def get_company_information(driver: WebDriver, company_url: str, settings: Settings) -> dict[str, Any]:
+def get_company_information(
+    driver: WebDriver, company_url: str, settings: Settings
+) -> dict[str, Any]:
     info = _empty_info(settings)
     if not company_url or company_url.startswith("indépendant-"):
         return info
 
-    # Prefer about page directly when URL is a company root
     about_url = company_url.rstrip("/")
     if "/about" not in about_url:
         about_url = f"{about_url}/about/"
@@ -81,7 +83,6 @@ def get_company_information(driver: WebDriver, company_url: str, settings: Setti
     try:
         _first_xpath(driver, S.ORG_TOP_CARD, timeout=settings.page_timeout)
     except TimeoutException:
-        # Fallback: company home then About click
         driver.get(company_url)
         human_pause(settings.min_delay, settings.max_delay)
         _first_xpath(driver, S.ORG_TOP_CARD, timeout=settings.page_timeout)
@@ -94,7 +95,7 @@ def get_company_information(driver: WebDriver, company_url: str, settings: Setti
     try:
         overview = _first_xpath(driver, S.OVERVIEW_DL, timeout=settings.page_timeout)
     except TimeoutException:
-        logger.warning("Overview block missing for %s", company_url)
+        logger.warning("Overview missing: %s", company_url)
         overview = None
 
     for key in settings.company_fields:
@@ -114,5 +115,4 @@ def get_company_information(driver: WebDriver, company_url: str, settings: Setti
     except TimeoutException:
         info["company_name"] = NOT_FOUND
 
-    logger.debug("Company info: %s", info)
     return info

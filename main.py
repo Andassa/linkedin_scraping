@@ -8,7 +8,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from linkedin_scraper.config import ROOT_DIR, Settings, get_settings
+from linkedin_scraper.config import ROOT_DIR, get_settings
 from linkedin_scraper.excel_store import ExcelStore, ensure_data_file
 from linkedin_scraper.logging_setup import setup_logging
 from linkedin_scraper.pipeline import Pipeline
@@ -16,7 +16,7 @@ from linkedin_scraper.pipeline import Pipeline
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="LinkedIn company enrichment from profile URLs in Excel.",
+    help="Enrich Excel rows with LinkedIn company data.",
 )
 console = Console()
 
@@ -24,50 +24,43 @@ console = Console()
 def _resolve_excel(path: Optional[Path]) -> Path:
     if path:
         return path.expanduser().resolve()
-    data = ROOT_DIR / "data" / "scalezia.xlsx"
-    legacy = ROOT_DIR / "scalezia.xlsx"
-    return ensure_data_file(legacy, data)
+    return ensure_data_file(ROOT_DIR / "scalezia.xlsx", ROOT_DIR / "data" / "scalezia.xlsx")
 
 
 @app.command("status")
 def status(
-    excel: Optional[Path] = typer.Option(None, "--excel", "-e", help="Path to workbook"),
+    excel: Optional[Path] = typer.Option(None, "--excel", "-e", help="Workbook path"),
 ) -> None:
-    """Show enrichment coverage."""
+    """Coverage summary for the workbook."""
     settings = get_settings()
     path = _resolve_excel(excel)
     store = ExcelStore(path, settings)
     total = len(store)
-    pending = store.pending_indices(only_missing=True)
-    done = total - len(pending)
+    pending = len(store.pending_indices(only_missing=True))
 
-    table = Table(title=f"Workbook · {path.name}")
+    table = Table(title=path.name)
     table.add_column("Metric")
     table.add_column("Value", justify="right")
     table.add_row("Rows", str(total))
-    table.add_row("Enriched / with company link", str(done))
-    table.add_row("Pending", str(len(pending)))
+    table.add_row("Done", str(total - pending))
+    table.add_row("Pending", str(pending))
     console.print(table)
 
 
 @app.command("run")
 def run(
     excel: Optional[Path] = typer.Option(None, "--excel", "-e"),
-    start: int = typer.Option(0, "--start", help="0-based start index"),
-    end: Optional[int] = typer.Option(None, "--end", help="Exclusive end index"),
-    limit: Optional[int] = typer.Option(None, "--limit", "-n", help="Max rows this run"),
-    all_rows: bool = typer.Option(
-        False, "--all", help="Reprocess even if already enriched"
-    ),
-    dry_run: bool = typer.Option(False, "--dry-run", help="List work without browser"),
+    start: int = typer.Option(0, "--start", help="Start index (0-based)"),
+    end: Optional[int] = typer.Option(None, "--end", help="End index (exclusive)"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-n", help="Max rows"),
+    all_rows: bool = typer.Option(False, "--all", help="Include already enriched rows"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print queue, no browser"),
     headless: bool = typer.Option(False, "--headless"),
     save_every: Optional[int] = typer.Option(None, "--save-every"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """
-    Login to LinkedIn and enrich company fields for pending profile rows.
-    """
-    overrides = {}
+    """Log in and enrich pending profile rows."""
+    overrides: dict = {}
     if headless:
         overrides["headless"] = True
     if save_every is not None:
@@ -78,8 +71,7 @@ def run(
 
     path = _resolve_excel(excel)
     store = ExcelStore(path, settings)
-    pipeline = Pipeline(settings, store)
-    stats = pipeline.run(
+    stats = Pipeline(settings, store).run(
         start=start,
         end=end,
         limit=limit,
@@ -89,46 +81,44 @@ def run(
 
     if not dry_run:
         console.print(
-            f"[bold green]Done[/] processed={stats.processed} "
-            f"enriched={stats.enriched} independent={stats.independent} "
-            f"failed={stats.failed}"
+            f"processed={stats.processed} enriched={stats.enriched} "
+            f"independent={stats.independent} failed={stats.failed}"
         )
 
 
 @app.command("doctor")
 def doctor() -> None:
-    """Quick environment check."""
+    """Validate local setup."""
     from linkedin_scraper.auth import credentials_look_placeholder
 
     settings = get_settings()
-    setup_logging(settings.log_dir, verbose=False)
     password = (
         settings.linkedin_password.get_secret_value()
         if settings.linkedin_password
         else None
     )
-    real_creds = bool(settings.linkedin_email and password) and not credentials_look_placeholder(
+    has_creds = bool(settings.linkedin_email and password) and not credentials_look_placeholder(
         settings.linkedin_email, password
     )
-    checks = [
-        ("Python package imports", True),
-        (".env real credentials (not placeholders)", real_creds),
-        ("Excel (data/ or root)", (ROOT_DIR / "data" / "scalezia.xlsx").exists() or (ROOT_DIR / "scalezia.xlsx").exists()),
-    ]
-    table = Table(title="Doctor")
+    has_excel = (ROOT_DIR / "data" / "scalezia.xlsx").exists() or (
+        ROOT_DIR / "scalezia.xlsx"
+    ).exists()
+
+    table = Table(title="doctor")
     table.add_column("Check")
     table.add_column("OK")
-    for name, ok in checks:
+    for name, ok in (
+        ("Imports", True),
+        ("Credentials in .env", has_creds),
+        ("Excel workbook", has_excel),
+    ):
         table.add_row(name, "[green]yes[/]" if ok else "[red]no[/]")
     console.print(table)
-    if not real_creds:
-        console.print(
-            "[yellow]Édite[/] [cyan].env[/] : remplace "
-            "[red]your.email@example.com[/] / [red]your-password[/] "
-            "par ton vrai compte LinkedIn."
-        )
+
+    if not has_creds:
+        console.print("Set LINKEDIN_EMAIL and LINKEDIN_PASSWORD in .env, then retry.")
     else:
-        console.print("OK — lance: [cyan]python main.py run --limit 3[/]")
+        console.print("Ready. Example: python main.py run --limit 3")
 
 
 if __name__ == "__main__":

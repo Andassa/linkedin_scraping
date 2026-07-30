@@ -27,10 +27,15 @@ PLACEHOLDER_PASSWORDS = {"your-password", "password", "changeme"}
 def credentials_look_placeholder(email: str | None, password: str | None) -> bool:
     if not email or not password:
         return True
-    return email.strip().lower() in PLACEHOLDER_EMAILS or password.strip() in PLACEHOLDER_PASSWORDS
+    return (
+        email.strip().lower() in PLACEHOLDER_EMAILS
+        or password.strip() in PLACEHOLDER_PASSWORDS
+    )
 
 
-def _find_login_field(driver: WebDriver, *, ids: list[str], names: list[str], css: list[str]):
+def _find_login_field(
+    driver: WebDriver, *, ids: list[str], names: list[str], css: list[str]
+):
     for element_id in ids:
         els = driver.find_elements(By.ID, element_id)
         if els:
@@ -49,13 +54,13 @@ def _find_login_field(driver: WebDriver, *, ids: list[str], names: list[str], cs
 def _click_first(driver: WebDriver, xpaths: list[str]) -> bool:
     for xp in xpaths:
         els = driver.find_elements(By.XPATH, xp)
-        if els:
-            try:
-                els[0].click()
-                return True
-            except WebDriverException:
-                driver.execute_script("arguments[0].click();", els[0])
-                return True
+        if not els:
+            continue
+        try:
+            els[0].click()
+        except WebDriverException:
+            driver.execute_script("arguments[0].click();", els[0])
+        return True
     return False
 
 
@@ -72,15 +77,16 @@ def is_logged_in(driver: WebDriver, timeout: int = 5) -> bool:
         return False
 
     try:
-        cookies = {c["name"] for c in driver.get_cookies()}
-        if "li_at" in cookies:
+        if "li_at" in {c["name"] for c in driver.get_cookies()}:
             return True
     except WebDriverException:
         return False
 
     for xp in S.FEED_READY:
         try:
-            WebDriverWait(driver, timeout).until(EC.presence_of_element_located((By.XPATH, xp)))
+            WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.XPATH, xp))
+            )
             return True
         except (TimeoutException, NoSuchWindowException, InvalidSessionIdException):
             continue
@@ -89,11 +95,9 @@ def is_logged_in(driver: WebDriver, timeout: int = 5) -> bool:
 
     try:
         url = driver.current_url or ""
-        if "/feed" in url or "/mynetwork" in url:
-            return True
+        return "/feed" in url or "/mynetwork" in url
     except WebDriverException:
         return False
-    return False
 
 
 def login(
@@ -103,9 +107,8 @@ def login(
     manual_fallback: bool = True,
 ) -> None:
     """
-    Attempt form login. If LinkedIn shows a challenge/CAPTCHA/2FA,
-    wait for the user to finish manually when manual_fallback is True.
-    Do not close the Chrome window during this wait.
+    Sign in via the login form. If LinkedIn raises a challenge, wait for
+    manual completion when ``manual_fallback`` is True.
     """
     email = settings.linkedin_email
     password = (
@@ -116,17 +119,15 @@ def login(
 
     if credentials_look_placeholder(email, password):
         raise RuntimeError(
-            "Ton fichier .env contient encore les valeurs d'exemple "
-            "(your.email@example.com / your-password).\n"
-            "Ouvre linkeDIn_scraping/.env et mets ton vrai email + mot de passe LinkedIn, "
-            "puis relance: python main.py run --limit 3"
+            "Placeholder credentials in .env. "
+            "Set LINKEDIN_EMAIL and LINKEDIN_PASSWORD, then rerun."
         )
 
     driver.get("https://www.linkedin.com/login")
     human_pause(1.5, 2.5)
 
     if is_logged_in(driver, timeout=3):
-        logger.info("Already authenticated (session / profile).")
+        logger.info("Session already authenticated")
         return
 
     logger.info("Signing in as %s", email)
@@ -155,38 +156,33 @@ def login(
         human_pause(2.0, 3.0)
     else:
         logger.warning(
-            "Login form fields not found (page may have changed or shown a challenge). "
-            "Connecte-toi manuellement dans la fenêtre Chrome — ne la ferme pas."
+            "Login fields not found; complete sign-in in the Chrome window"
         )
 
     wait_s = settings.manual_login_wait if manual_fallback else 25
-    logger.info(
-        "Waiting up to %ss for login / CAPTCHA / 2FA. Keep Chrome open.",
-        wait_s,
-    )
+    logger.info("Waiting up to %ss for login / challenge (keep Chrome open)", wait_s)
 
     deadline = time.time() + wait_s
     while time.time() < deadline:
         if not _browser_alive(driver):
             raise RuntimeError(
-                "La fenêtre Chrome a été fermée pendant le login. "
-                "Relance et laisse le navigateur ouvert jusqu'à 'Login confirmed'."
+                "Chrome closed during login. Rerun and leave the browser open."
             )
         if is_logged_in(driver, timeout=2):
-            logger.info("Login confirmed.")
+            logger.info("Login OK")
             return
         time.sleep(2)
 
     if not _browser_alive(driver):
-        raise RuntimeError("Chrome closed before login completed.")
+        raise RuntimeError("Chrome closed before login completed")
 
     if is_logged_in(driver, timeout=3):
-        logger.info("Login confirmed.")
+        logger.info("Login OK")
         return
 
     raise RuntimeError(
-        "Login failed or timed out. Complete any CAPTCHA/2FA in the browser, "
-        "or increase MANUAL_LOGIN_WAIT / use CHROME_PROFILE_DIR for a warm session."
+        "Login timed out. Finish CAPTCHA/2FA in the browser, "
+        "raise MANUAL_LOGIN_WAIT, or set CHROME_PROFILE_DIR."
     )
 
 

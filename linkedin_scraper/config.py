@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     )
 
     linkedin_email: Optional[str] = Field(default=None, alias="LINKEDIN_EMAIL")
-    linkedin_password: Optional[SecretStr] = Field(default=None, alias="LINKEDIN_PASSWORD")
+    linkedin_password: Optional[SecretStr] = Field(
+        default=None, alias="LINKEDIN_PASSWORD"
+    )
 
     headless: bool = Field(default=False, alias="HEADLESS")
     save_every: int = Field(default=5, alias="SAVE_EVERY", ge=1)
@@ -33,7 +35,6 @@ class Settings(BaseSettings):
     excel_path: Path = Field(default=DEFAULT_DATA)
     log_dir: Path = Field(default=DEFAULT_LOG_DIR)
 
-    # Column contract
     linkedin_col: str = "linkedIn"
     company_link_col: str = "Link_Linkdin_company"
     company_fields: tuple[str, ...] = (

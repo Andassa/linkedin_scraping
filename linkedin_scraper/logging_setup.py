@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 from pathlib import Path
 
 from rich.logging import RichHandler
@@ -16,11 +15,7 @@ def setup_logging(log_dir: Path, verbose: bool = False) -> logging.Logger:
     logger.handlers.clear()
     logger.propagate = False
 
-    console = RichHandler(
-        rich_tracebacks=True,
-        show_path=False,
-        markup=True,
-    )
+    console = RichHandler(rich_tracebacks=True, show_path=False, markup=True)
     console.setLevel(level)
     console.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(console)
@@ -32,13 +27,8 @@ def setup_logging(log_dir: Path, verbose: bool = False) -> logging.Logger:
     )
     logger.addHandler(file_handler)
 
-    # Quiet noisy libs
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("selenium").setLevel(logging.WARNING)
     logging.getLogger("WDM").setLevel(logging.WARNING)
-
-    # Ensure uncaught stderr noise doesn't hide our logs
-    if not any(isinstance(h, logging.StreamHandler) and h.stream is sys.stderr for h in logging.root.handlers):
-        pass
 
     return logger

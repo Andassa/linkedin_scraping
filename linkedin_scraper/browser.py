@@ -30,15 +30,16 @@ def build_chrome_options(settings: Settings) -> Options:
         "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     )
-    options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+    options.add_experimental_option(
+        "excludeSwitches", ["enable-automation", "enable-logging"]
+    )
     options.add_experimental_option("useAutomationExtension", False)
 
-    profile = settings.chrome_profile_dir
-    if profile:
-        path = Path(profile).expanduser().resolve()
+    if settings.chrome_profile_dir:
+        path = Path(settings.chrome_profile_dir).expanduser().resolve()
         path.mkdir(parents=True, exist_ok=True)
         options.add_argument(f"--user-data-dir={path}")
-        logger.info("Using Chrome profile: %s", path)
+        logger.info("Chrome profile: %s", path)
 
     return options
 
@@ -54,13 +55,14 @@ def create_driver(settings: Settings) -> WebDriver:
         driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
             {
-                "source": """
-                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                """
+                "source": (
+                    "Object.defineProperty(navigator, 'webdriver', "
+                    "{get: () => undefined});"
+                )
             },
         )
-    except Exception as exc:  # noqa: BLE001 — CDP optional
-        logger.debug("CDP stealth tweak skipped: %s", exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CDP patch skipped: %s", exc)
 
     return driver
 
@@ -71,4 +73,4 @@ def quit_driver(driver: Optional[WebDriver]) -> None:
     try:
         driver.quit()
     except Exception as exc:  # noqa: BLE001
-        logger.debug("Driver quit error: %s", exc)
+        logger.debug("quit: %s", exc)

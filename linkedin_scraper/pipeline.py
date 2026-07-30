@@ -41,11 +41,10 @@ class Pipeline:
         self.stats = RunStats()
 
     def request_stop(self, *_args) -> None:
-        logger.warning("Stop requested — finishing current row then saving…")
+        logger.warning("Interrupt received — finishing current row, then saving")
         self._stop = True
 
-    def _browse_noise(self) -> None:
-        """Light navigation to look less robotic between batches."""
+    def _interleave_browse(self) -> None:
         destinations = [
             "https://www.linkedin.com/feed/",
             "https://www.linkedin.com/mynetwork/",
@@ -54,19 +53,18 @@ class Pipeline:
         ]
         url = random.choice(destinations)
         try:
-            logger.debug("Noise browse → %s", url)
             assert self.driver is not None
             self.driver.get(url)
             human_pause(2.0, 5.0)
             scroll_random(self.driver)
             human_pause(1.0, 3.0)
         except Exception as exc:  # noqa: BLE001
-            logger.debug("Noise browse failed: %s", exc)
+            logger.debug("Interleave browse failed: %s", exc)
 
     def process_row(self, index: int) -> None:
         assert self.driver is not None
         profile_url = self.store.row_linkedin(index)
-        logger.info("[%s] Profile %s", index, profile_url)
+        logger.info("[%s] %s", index, profile_url)
 
         try:
             section = open_experience_section(
@@ -78,22 +76,22 @@ class Pipeline:
             payload: dict = {self.settings.company_link_col: company_ref}
             if is_indep:
                 self.stats.independent += 1
-                logger.info("[%s] Independent / no company page: %s", index, company_ref)
+                logger.info("[%s] no company page: %s", index, company_ref)
             elif company_ref:
                 human_pause(self.settings.min_delay, self.settings.max_delay)
                 info = get_company_information(self.driver, company_ref, self.settings)
                 payload.update(info)
                 self.stats.enriched += 1
-                logger.info("[%s] Enriched → %s", index, info.get("company_name"))
+                logger.info("[%s] %s", index, info.get("company_name"))
             else:
-                logger.warning("[%s] No company links found", index)
+                logger.warning("[%s] no company links", index)
                 self.stats.failed += 1
 
             self.store.update_row(index, payload)
             self.stats.processed += 1
-        except Exception as exc:  # noqa: BLE001 — keep batch running
+        except Exception as exc:  # noqa: BLE001
             self.stats.failed += 1
-            logger.exception("[%s] Failed: %s", index, exc)
+            logger.exception("[%s] failed: %s", index, exc)
 
         human_pause(self.settings.min_delay, self.settings.max_delay + 2)
 
@@ -106,12 +104,14 @@ class Pipeline:
         only_missing: bool = True,
         dry_run: bool = False,
     ) -> RunStats:
-        indices = self.store.pending_indices(start=start, end=end, only_missing=only_missing)
+        indices = self.store.pending_indices(
+            start=start, end=end, only_missing=only_missing
+        )
         if limit is not None:
             indices = indices[:limit]
 
         logger.info(
-            "Queue: %s rows (start=%s end=%s only_missing=%s dry_run=%s)",
+            "queue=%s start=%s end=%s only_missing=%s dry_run=%s",
             len(indices),
             start,
             end,
@@ -120,9 +120,9 @@ class Pipeline:
         )
         if dry_run:
             for i in indices[:20]:
-                logger.info("DRY would process [%s] %s", i, self.store.row_linkedin(i))
+                logger.info("dry [%s] %s", i, self.store.row_linkedin(i))
             if len(indices) > 20:
-                logger.info("… and %s more", len(indices) - 20)
+                logger.info("… +%s", len(indices) - 20)
             return self.stats
 
         signal.signal(signal.SIGINT, self.request_stop)
@@ -139,7 +139,7 @@ class Pipeline:
 
                 if n % self.settings.save_every == 0:
                     self.store.save()
-                    self._browse_noise()
+                    self._interleave_browse()
 
             self.store.save()
         finally:
@@ -147,7 +147,7 @@ class Pipeline:
             self.driver = None
 
         logger.info(
-            "Done — processed=%s enriched=%s independent=%s failed=%s",
+            "done processed=%s enriched=%s independent=%s failed=%s",
             self.stats.processed,
             self.stats.enriched,
             self.stats.independent,

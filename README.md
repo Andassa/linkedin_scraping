@@ -1,19 +1,8 @@
-# LinkedIn Company Enrichment Scraper
+# LinkedIn company enrichment
 
-Selenium pipeline that reads LinkedIn profile URLs from Excel, opens each profile’s experience, and enriches the workbook with the first company’s About fields.
+Reads profile URLs from an Excel workbook, opens each experience section, and fills company About fields for the first employer.
 
-> **Important:** Automating LinkedIn may violate [LinkedIn’s User Agreement](https://www.linkedin.com/legal/user-agreement). Use only on accounts/data you are authorized to process, keep volumes low, and prefer official APIs when available. This tool is for controlled internal enrichment — not bulk harvesting.
-
-## Features
-
-- Modular package (`linkedin_scraper/`) instead of one giant script
-- Credentials via `.env` (never hardcoded)
-- Resume: skips rows that already have company data
-- Atomic Excel saves + Ctrl+C graceful stop
-- Fallback XPath strategies (LinkedIn DOM changes often)
-- CLI: `status` / `run` / `doctor`
-- Optional persistent Chrome profile for fewer re-logins
-- Structured logging to console + `logs/scraper.log`
+Automating LinkedIn can breach their [User Agreement](https://www.linkedin.com/legal/user-agreement). Use only on data you are allowed to process; prefer the official API when possible.
 
 ## Setup
 
@@ -23,76 +12,65 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# edit .env with LINKEDIN_EMAIL / LINKEDIN_PASSWORD
 ```
 
-Place (or keep) your workbook at `data/scalezia.xlsx`. On first run, the CLI copies root `scalezia.xlsx` there if needed.
+Set `LINKEDIN_EMAIL` and `LINKEDIN_PASSWORD` in `.env`.
 
-### Expected columns
+Workbook path: `data/scalezia.xlsx`. If missing, the CLI copies a root `scalezia.xlsx` into `data/` on first run.
 
-Required:
+### Columns
 
-- `linkedIn` — profile URL
+| Role | Name |
+|------|------|
+| Input | `linkedIn` |
+| Output | `Link_Linkdin_company`, `company_name`, `Phone`, `Website`, `Industry`, `Company size`, `Headquarters`, `Founded`, `Specialties` |
 
-Written / updated:
+Rows that already have a company link or name are skipped unless `--all` is set.
 
-- `Link_Linkdin_company`
-- `company_name`, `Phone`, `Website`, `Industry`, `Company size`, `Headquarters`, `Founded`, `Specialties`
-
-## Usage
+## Commands
 
 ```bash
-# Coverage
 python main.py status
-
-# Dry-run: see which rows would be processed
+python main.py doctor
 python main.py run --dry-run --limit 20
-
-# Smoke test (3 pending rows, visible browser — complete CAPTCHA/2FA if asked)
 python main.py run --limit 3
-
-# Batch from index 256, max 50 rows
 python main.py run --start 256 --limit 50
-
-# Reprocess everything in a range
 python main.py run --start 0 --end 100 --all
-
-# Headless (often blocked by LinkedIn login challenges — prefer headed)
 python main.py run --limit 5 --headless
 ```
 
-### Warm Chrome session (recommended)
+Headless login often hits LinkedIn challenges; prefer a visible browser. For CAPTCHA/2FA, leave Chrome open until login completes.
 
-Set in `.env`:
+Persistent session (optional) in `.env`:
 
 ```env
 CHROME_PROFILE_DIR=.chrome_profile
 ```
 
-Log in once with the browser UI; later runs reuse cookies.
+Log in once; later runs reuse the profile cookies.
 
-## Config (env)
+## Environment
 
-| Variable | Default | Meaning |
-|---|---|---|
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `LINKEDIN_EMAIL` | — | Account email |
 | `LINKEDIN_PASSWORD` | — | Account password |
 | `HEADLESS` | `false` | Headless Chrome |
-| `SAVE_EVERY` | `5` | Checkpoint every N rows |
-| `MIN_DELAY` / `MAX_DELAY` | `2` / `5` | Random pause range (seconds) |
-| `PAGE_TIMEOUT` | `20` | Element wait timeout |
-| `MANUAL_LOGIN_WAIT` | `90` | Seconds to finish CAPTCHA/2FA |
-| `CHROME_PROFILE_DIR` | — | Persistent Chrome user-data dir |
+| `SAVE_EVERY` | `5` | Checkpoint interval (rows) |
+| `MIN_DELAY` / `MAX_DELAY` | `2` / `5` | Pause range (seconds) |
+| `PAGE_TIMEOUT` | `20` | Wait timeout (seconds) |
+| `MANUAL_LOGIN_WAIT` | `90` | Time allowed for CAPTCHA/2FA |
+| `CHROME_PROFILE_DIR` | — | Chrome user-data directory |
 
-## Project layout
+## Layout
 
 ```
 linkeDIn_scraping/
-├── main.py                 # CLI entry
+├── main.py
 ├── requirements.txt
 ├── .env.example
-├── data/                   # Excel workbooks
-├── logs/                   # scraper.log
+├── data/
+├── logs/
 ├── linkedin_scraper/
 │   ├── config.py
 │   ├── browser.py
@@ -101,16 +79,8 @@ linkeDIn_scraping/
 │   ├── company.py
 │   ├── excel_store.py
 │   ├── pipeline.py
-│   └── selectors.py        # XPath fallbacks — edit here when DOM breaks
-└── legacy/                 # previous scripts (reference only)
+│   └── selectors.py
+└── legacy/
 ```
 
-## When LinkedIn breaks selectors
-
-Edit `linkedin_scraper/selectors.py` and add new XPaths at the **front** of each list. Keep old ones as fallbacks.
-
-## Security
-
-- Never commit `.env`
-- Rotate any passwords that were previously hardcoded in old scripts
-- Treat Excel exports as sensitive PII
+If LinkedIn changes the DOM, update XPaths in `linkedin_scraper/selectors.py` (prepend new selectors; keep existing ones as fallbacks).
