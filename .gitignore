@@ -1,0 +1,42 @@
+# Secrets
+.env
+*.pem
+credentials*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+ENV/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*~
+
+# Logs & runtime
+logs/
+*.log
+.tmp/
+.chrome_profile/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Excel / client data (PII — keep local)
+*.xlsx
+data/*.xlsx
+!data/.gitkeep
